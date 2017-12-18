@@ -73,6 +73,54 @@ static void flipFiles(ZipInfo* info)
 	}
 }
 
+static void extractZipDateAndTime(CDFile* file, uint16_t *year, uint16_t *month, uint16_t *day, uint16_t *hour, uint16_t *minute, uint16_t *second)
+{
+	struct dateFormat {
+		uint16_t day:5;
+		uint16_t month:4;
+		uint16_t year:7; // add 1980
+	};
+	union dateFormatUnion {
+		uint16_t value;
+		struct dateFormat alt;
+	};
+
+	union dateFormatUnion du = { .value = file->modDate };
+	struct dateFormat df = du.alt;
+
+	if(year) {
+		*year = df.year + 1980;
+	}
+	if(month) {
+		*month = df.month;
+	}
+	if(day) {
+		*day = df.day;
+	}
+
+	struct timeFormat {
+		uint16_t second:5; // multiply by 2
+		uint16_t minute:6;
+		uint16_t hour:5;
+	};
+	union timeFormatUnion {
+		uint16_t value;
+		struct timeFormat alt;
+	};
+	union timeFormatUnion tu = { .value = file->modTime };
+	struct timeFormat tf = tu.alt;
+
+	if(hour) {
+		*hour = tf.hour;
+	}
+	if(minute) {
+		*minute = tf.minute;
+	}
+	if(second) {
+		*second = tf.second * 2;
+	}
+}
+
 ZipInfo* PartialZipInit(const char* url)
 {
 	ZipInfo* info = (ZipInfo*) malloc(sizeof(ZipInfo));
@@ -190,6 +238,17 @@ ZipInfo* PartialZipInit(const char* url)
 	}
 }
 
+
+ZipInfo* PartialZipInitWithCallback(const char* url, PartialZipProgressCallback progressCallback)
+{
+	ZipInfo* info = PartialZipInit(url);
+	if(info)
+	{
+		PartialZipSetProgressCallback(info, progressCallback);
+	}
+	return info;
+}
+
 CDFile* PartialZipFindFile(ZipInfo* info, const char* fileName)
 {
 	char* cur = info->centralDirectory;
@@ -210,6 +269,10 @@ CDFile* PartialZipFindFile(ZipInfo* info, const char* fileName)
 
 CDFile* PartialZipListFiles(ZipInfo* info)
 {
+	printf("Archive:  %s\n"
+		"  Length      Date    Time    Name\n"
+		"---------  ---------- -----   ----\n", info->url);
+	uint64_t total = 0;
 	char* cur = info->centralDirectory;
 	unsigned int i;
 	for(i = 0; i < info->centralDirectoryDesc->CDEntries; i++)
@@ -220,13 +283,20 @@ CDFile* PartialZipListFiles(ZipInfo* info)
 		memcpy(myFileName, curFileName, candidate->lenFileName);
 		myFileName[candidate->lenFileName] = '\0';
 
-		printf("%s: method: %d, compressed size: %d, size: %d\n", myFileName, candidate->method,
-				candidate->compressedSize, candidate->size);
+		uint16_t year, month, day, hour, minute;
+		extractZipDateAndTime(candidate, &year, &month, &day, &hour, &minute, NULL);
+
+		printf(" %8u  %02d-%02d-%04d %02d:%02d   %s\n", candidate->size,
+			month, day, year, hour, minute, myFileName);
 
 		free(myFileName);
 
 		cur += sizeof(CDFile) + candidate->lenFileName + candidate->lenExtra + candidate->lenComment;
+
+		total += candidate->size;
 	}
+	printf("---------                     -------\n"
+		"%llu                     %d files\n", total, i);
 
 	return NULL;
 }
@@ -242,7 +312,6 @@ unsigned char* PartialZipGetFile(ZipInfo* info, CDFile* file)
 	sprintf(sRange, "%" PRIu64 "-%" PRIu64, start, end);
 
 	void* pFileHeader[] = {pLocalHeader, NULL, NULL, NULL};
-
 	curl_easy_setopt(info->hIPSW, CURLOPT_URL, info->url);
 	curl_easy_setopt(info->hIPSW, CURLOPT_FOLLOWLOCATION, 1);
 	curl_easy_setopt(info->hIPSW, CURLOPT_WRITEFUNCTION, receiveData);
@@ -314,4 +383,3 @@ void PartialZipRelease(ZipInfo* info)
 
 	curl_global_cleanup();
 }
-

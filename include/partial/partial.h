@@ -68,6 +68,8 @@ extern "C" {
 
 	ZipInfo* PartialZipInit(const char* url);
 
+	ZipInfo* PartialZipInitWithCallback(const char* url, PartialZipProgressCallback progressCallback);
+
 	CDFile* PartialZipFindFile(ZipInfo* info, const char* fileName);
 
 	CDFile* PartialZipListFiles(ZipInfo* info);
@@ -75,10 +77,9 @@ extern "C" {
 	unsigned char* PartialZipGetFile(ZipInfo* info, CDFile* file);
 
 	void PartialZipRelease(ZipInfo* info);
-	
+
 	void PartialZipSetProgressCallback(ZipInfo* info, PartialZipProgressCallback progressCallback);
 
 #ifdef __cplusplus
 }
 #endif
-
