@@ -3,9 +3,11 @@
 #include "common.h"
 #include "partial/partial.h"
 
+static char quiet = 0;
+
 void callback(ZipInfo * info, CDFile * file, size_t progress) {
 	int percentDone = progress * 100 / file->compressedSize;
-	fprintf(stderr, "Getting: %d%%\r", percentDone);
+	if (!quiet) fprintf(stderr, "Getting: %d%%\033[2K", percentDone);
 }
 
 void print_help() {
@@ -36,7 +38,7 @@ void print_help() {
 int extract_file(ZipInfo * info, const char * filename, unsigned char ** buffer, size_t * size) {
 	CDFile * file = PartialZipFindFile(info, filename);
 	if (!file) {
-		fprintf(stderr, "Cannot find %s in %s\n", filename, info->url);
+		if (!quiet) fprintf(stderr, "Cannot find %s in %s\n", filename, info->url);
 		return -1;
 	}
 
@@ -54,7 +56,7 @@ int extract_file(ZipInfo * info, const char * filename, unsigned char ** buffer,
 int write_file(const char * filename, unsigned char * data, size_t size) {
 	FILE * fp = fopen(filename, "w");
 	if (fp == NULL) {
-		fprintf(stderr, "Failed to open file at %s\n", filename);
+		if (!quiet) fprintf(stderr, "Failed to open file at %s\n", filename);
 		return -1;
 	}
 
@@ -103,6 +105,8 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
+	quiet = q;
+
 	if (h) {
 		print_help();
 		return 0;
@@ -118,7 +122,7 @@ int main(int argc, char* argv[]) {
 
 	ZipInfo * info = PartialZipInitWithCallback(fname, callback);
 	if (!info) {
-		fprintf(stderr, "Cannot open %s\n", fname);
+		if (!quiet) fprintf(stderr, "Cannot open %s\n", fname);
 		return -1;
 	}
 
@@ -159,25 +163,25 @@ modifiers:
 	// }
 
 	if (argc - optind == 0) {
-		printf("[#] Extracting all files\n");
+		if (!quiet) fprintf(stdout, "[#] Extracting all files\n");
 		goto cleanup;
 	} else {
 		if (x) {
-			printf("[#] Extracting all but listed files\n");
+			if (!quiet) fprintf(stdout, "[#] Extracting all but listed files\n");
 		} else {
 			// printf("[#] Extracting listed files\n");
 			for (int i = optind; i < argc; i++) {
 				const char * filename = argv[i];
 				unsigned char * buffer = NULL;
 				size_t size = 0;
-				printf("  inflating: %s\n", filename);
+				if (!quiet) fprintf(stdout, "  inflating: %s\n", filename);
 				int r = extract_file(info, filename, &buffer, &size);
 				if (r == 0) {
 					//check if file exists, print and read answer:
 					// printf("replace %s? [y]es, [n]o, [A]ll, [N]one, [r]ename: ", filename);
 					r = write_file(filename, buffer, size);
 					if (r != 0) {
-						fprintf(stderr, "Couldn't extract %s\n", filename);
+						if (!quiet) fprintf(stderr, "Couldn't extract %s\n", filename);
 					}
 				}
 			}
@@ -186,7 +190,7 @@ modifiers:
 		goto cleanup;
 	}
 
-	fprintf(stderr, "Not supported yet\n");
+	if (!quiet) fprintf(stderr, "Not supported yet\n");
 
 	cleanup:
 	PartialZipRelease(info);
